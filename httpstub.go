@@ -78,6 +78,7 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, m := range rt.matchers {
 		match := true
 		for _, fn := range m.matchFuncs {
+			r := cloneReq(r2)
 			if !fn(r) {
 				match = false
 			}
