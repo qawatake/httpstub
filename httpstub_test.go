@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -105,6 +106,97 @@ func TestMatcherMatch(t *testing.T) {
 	if got != want {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
+}
+
+func TestMatcherMatchConsumeBody(t *testing.T) {
+	t.Run("with other matcher func", func(t *testing.T) {
+		rt := NewRouter(t)
+		rt.Path("/api").Match(func(r *http.Request) bool {
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				return false
+			}
+			return strings.Contains(string(b), "getuser")
+		}).Response(http.StatusAccepted, nil)
+		rt.Path("/api").Match(func(r *http.Request) bool {
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				return false
+			}
+			return strings.Contains(string(b), "createuser")
+		}).Response(http.StatusAccepted, nil)
+		ts := rt.Server()
+		t.Cleanup(func() {
+			ts.Close()
+		})
+		tc := ts.Client()
+		res, err := tc.Post("https://example.com/api", "application/json", strings.NewReader(`{"apitype":"createuser", "user": {"name": "alice"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			res.Body.Close()
+		})
+
+		requests := rt.Requests()
+		if len(requests) != 1 {
+			t.Errorf("got %v\nwant %v", len(requests), 1)
+		}
+		b, err := io.ReadAll(requests[0].Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := string(b)
+		want := `{"apitype":"createuser", "user": {"name": "alice"}}`
+		if got != want {
+			t.Errorf("got %v\nwant %v", got, want)
+		}
+
+	})
+
+	t.Run("only Match", func(t *testing.T) {
+		rt := NewRouter(t)
+		rt.Match(func(r *http.Request) bool {
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				return false
+			}
+			return strings.Contains(string(b), "getuser")
+		}).Response(http.StatusAccepted, nil)
+		rt.Match(func(r *http.Request) bool {
+			b, err := io.ReadAll(r.Body)
+			if err != nil {
+				return false
+			}
+			return strings.Contains(string(b), "createuser")
+		}).Response(http.StatusAccepted, nil)
+		ts := rt.Server()
+		t.Cleanup(func() {
+			ts.Close()
+		})
+		tc := ts.Client()
+		res, err := tc.Post("https://example.com/api", "application/json", strings.NewReader(`{"apitype":"createuser", "user": {"name": "alice"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			res.Body.Close()
+		})
+
+		requests := rt.Requests()
+		if len(requests) != 1 {
+			t.Errorf("got %v\nwant %v", len(requests), 1)
+		}
+		b, err := io.ReadAll(requests[0].Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := string(b)
+		want := `{"apitype":"createuser", "user": {"name": "alice"}}`
+		if got != want {
+			t.Errorf("got %v\nwant %v", got, want)
+		}
+	})
 }
 
 func TestMatcherMethod(t *testing.T) {
